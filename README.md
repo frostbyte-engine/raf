@@ -25,5 +25,5 @@ options:
 
 ### example usage
 ```bash
-./build/raf font 8075237774 RobotoMono-Light.ttf
+./build/raf font 8075237774 --output RobotoMono-Light.ttf
 ```
