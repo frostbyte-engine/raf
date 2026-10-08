@@ -149,7 +149,7 @@ int main(int argc, char **argv) {
         }
 
         enum AssetType asset_type = ASSET_NONE;
-        int64_t assetid = 0; // 8075237774
+        int64_t assetid = 0;
         char *output_path = NULL;
 
         for (int i = 1; i < argc; i++) {
