@@ -92,19 +92,16 @@ int makeAssetRequest(CURL *curl_handle, struct DataStruct *data, int64_t assetid
 }
 
 int extractUrl(struct DataStruct *data, char *url, size_t expected_start_size) {
-        int good_url = 0;
         size_t url_start = expected_start_size - 1;
         size_t url_end = url_start + 1;
         for (; url_end < data->size; url_end++) {
                 if (data->memory[url_end] == '"') {
-                        good_url = 1;
-                        break;
+                        strncpy(url, data->memory + url_start, url_end - url_start);
+                        return 0;
                 }
         }
-        if (good_url)
-                strncpy(url, data->memory + url_start, url_end - url_start);
 
-        return good_url;
+        return 1;
 }
 
 int inflateBuffer(const char *src, size_t src_size, char **out, size_t *out_size) {
@@ -175,7 +172,7 @@ int makeRequest2(CURL *curl_handle, struct DataStruct *data1, char *output_path,
 
         struct DataStruct compressed_data = {0};
 
-        if (!extractUrl(data1, url, expected_start_size)) {
+        if (extractUrl(data1, url, expected_start_size)) {
                 fail = 1;
                 fprintf(stderr, "[ERROR] Failed to extract url from asset request\n");
                 goto REQUEST2_END;
