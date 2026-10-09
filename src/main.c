@@ -11,8 +11,8 @@
 
 const char cookie_expected_start1[] = ".ROBLOSECURITY=";
 const char cookie_expected_start2[] = "_|WARNING:-DO-NOT-SHARE-THIS.--Sharing-this-will-allow-someone-to-log-in-as-you-and-to-steal-your-ROBUX-and-items.|";
-const char fontrequest1_expected_start[] = "{\"locations\":[{\"assetFormat\":\"Font\",\"location\":\"";
-const char modelrequest1_expected_start[] = "{\"locations\":[{\"assetFormat\":\"source\",\"location\":\"";
+const char request1_expected_start_font[] = "{\"locations\":[{\"assetFormat\":\"Font\",\"location\":\"";
+const char request1_expected_start_source[] = "{\"locations\":[{\"assetFormat\":\"source\",\"location\":\"";
 
 struct DataStruct {
         int memerror;
@@ -261,10 +261,51 @@ int checkRequest1Data(struct DataStruct *data, const char *expected_start) {
         return 0;
 }
 
+int getNewCookie(const char *model_type, char *cookie, char *newcookie, size_t newcookie_size) {
+        if (!cookie)
+                cookie = getenv("RAF_COOKIE");
+
+        if (!cookie) {
+                fprintf(stderr, "[ERROR] You must provider either --cookie or RAF_COOKIE environment variable for type '%s'\n", model_type);
+                return 1;
+        }
+
+        size_t cookie_len = strlen(cookie);
+        // NOTE: we only need to check start2 len since it's bigger than start1
+        if (cookie_len < sizeof(cookie_expected_start2)) {
+                fprintf(stderr, "[ERROR] Cookie is too small (should be at LEAST %zu bytes, but only was %zu)\n", sizeof(cookie_expected_start2), cookie_len);
+                return 1;
+        }
+
+        int startswith_start1 = strncmp(cookie, cookie_expected_start1, sizeof(cookie_expected_start1) - 1) == 0;
+        int startswith_start2 = strncmp(cookie, cookie_expected_start2, sizeof(cookie_expected_start2) - 1) == 0;
+
+        if (!(startswith_start1 || startswith_start2)) {
+                fprintf(stderr, "[ERROR] Invalid cookie. Expected it to start with either '.ROBLOSECURITY=' or '_|WARNING:-DO-NOT-SHARE-THIS...'\n");
+                return 1;
+        }
+
+        size_t newcookie_pos = 0;
+        if (startswith_start2) {
+                printf("Cookie didn't start with '%s', so I'm inserting it...\n", cookie_expected_start1);
+
+                strncpy(newcookie, cookie_expected_start1, newcookie_size);
+                newcookie_pos += sizeof(cookie_expected_start1) - 1;
+        }
+        if (newcookie_pos + cookie_len >= 2048) {
+                // TODO: is 'at MOST 2048' accurate here?
+                fprintf(stderr, "[ERROR] Cookie is too big (should be at MOST 2048 bytes, but was %zu)\n", cookie_len);
+                return 1;
+        }
+        strncpy(newcookie + newcookie_pos, cookie, cookie_len);
+        return 0;
+}
+
 enum AssetType {
         ASSET_NONE,
         ASSET_FONT,
-        ASSET_MODEL
+        ASSET_MODEL,
+        ASSET_AUDIO
 };
 
 void displayHelp(void) {
@@ -272,6 +313,7 @@ void displayHelp(void) {
                "\ntypes:\n"
                "  font\n"
                "  model\n"
+               "  audio\n"
                "\noptions:\n"
                "  --output OUTPUTFILEPATH  -  needed for font & model\n"
                "  --cookie COOKIE          -  needed for model (you can also use RAF_COOKIE environment variable)\n");
@@ -314,6 +356,9 @@ int main(int argc, char **argv) {
                         goto READ_ASSETID_ARG;
                 } else if (strcmp(arg, "model") == 0) {
                         asset_type = ASSET_MODEL;
+                        goto READ_ASSETID_ARG;
+                } else if (strcmp(arg, "audio") == 0) {
+                        asset_type = ASSET_AUDIO;
                         goto READ_ASSETID_ARG;
                 } else if (strcmp(arg, "--output") == 0) {
                         if (++i >= argc) {
@@ -374,62 +419,26 @@ int main(int argc, char **argv) {
                 if (fail)
                         break;
 
-                if (checkRequest1Data(&data1, fontrequest1_expected_start)) {
+                if (checkRequest1Data(&data1, request1_expected_start_font)) {
                         fail = 1;
                         break;
                 }
 
-                fail = makeRequest2(curl_handle, &data1, output_path, sizeof(fontrequest1_expected_start), 0);
+                fail = makeRequest2(curl_handle, &data1, output_path, sizeof(request1_expected_start_font), 0);
                 free(data1.memory);
                 break;
-        case ASSET_MODEL:
+        case ASSET_MODEL: {
                 if (!output_path) {
                         fprintf(stderr, "[ERROR] You must provide an output file for type 'model'\n");
                         fail = 1;
                         break;
                 }
 
-                if (!cookie)
-                        cookie = getenv("RAF_COOKIE");
-
-                if (!cookie) {
-                        fprintf(stderr, "[ERROR] You must provider either --cookie or RAF_COOKIE environment variable for type 'model'\n");
-                        fail = 1;
-                        break; 
-                }
-
-                size_t cookie_len = strlen(cookie);
-                // NOTE: we only need to check start2 len since it's bigger than start1
-                if (cookie_len < sizeof(cookie_expected_start2)) {
-                        fprintf(stderr, "[ERROR] Cookie is too small (should be at LEAST %zu bytes, but only was %zu)\n", sizeof(cookie_expected_start2), cookie_len);
-                        fail = 1;
-                        break;
-                }
-
-                int startswith_start1 = strncmp(cookie, cookie_expected_start1, sizeof(cookie_expected_start1) - 1) == 0;
-                int startswith_start2 = strncmp(cookie, cookie_expected_start2, sizeof(cookie_expected_start2) - 1) == 0;
-
-                if (!(startswith_start1 || startswith_start2)) {
-                        fprintf(stderr, "[ERROR] Invalid cookie. Expected it to start with either '.ROBLOSECURITY=' or '_|WARNING:-DO-NOT-SHARE-THIS...'\n");
-                        fail = 1;
-                        break;
-                }
-
                 char newcookie[2048];
-                size_t newcookie_pos = 0;
-                if (startswith_start2) {
-                        printf("Cookie didn't start with '%s', so I'm inserting it...\n", cookie_expected_start1);
-
-                        strncpy(newcookie, cookie_expected_start1, sizeof(newcookie));
-                        newcookie_pos += sizeof(cookie_expected_start1) - 1;
-                }
-                if (newcookie_pos + cookie_len >= 2048) {
-                        // TODO: is 'at MOST 2048' accurate here?
-                        fprintf(stderr, "[ERROR] Cookie is too big (should be at MOST 2048 bytes, but was %zu)\n", cookie_len);
+                if (getNewCookie("model", cookie, newcookie, sizeof(newcookie))) {
                         fail = 1;
                         break;
                 }
-                strncpy(newcookie + newcookie_pos, cookie, cookie_len);
 
                 fail = makeAssetRequest(curl_handle, &data1, assetid, newcookie, NULL, NULL, NULL);
 
@@ -437,14 +446,41 @@ int main(int argc, char **argv) {
                 if (fail)
                         break;
 
-                if (checkRequest1Data(&data1, modelrequest1_expected_start)) {
+                if (checkRequest1Data(&data1, request1_expected_start_source)) {
                         fail = 1;
                         break;
                 }
 
-                fail = makeRequest2(curl_handle, &data1, output_path, sizeof(modelrequest1_expected_start), 1);
+                fail = makeRequest2(curl_handle, &data1, output_path, sizeof(request1_expected_start_source), 1);
                 free(data1.memory);
                 break;
+        } case ASSET_AUDIO: {
+                if (!output_path) {
+                        fprintf(stderr, "[ERROR] You must provide an output file for type 'audio'\n");
+                        fail = 1;
+                        break;
+                }
+
+                char newcookie[2048];
+                if (getNewCookie("audio", cookie, newcookie, sizeof(newcookie))) {
+                        fail = 1;
+                        break;
+                }
+
+                fail = makeAssetRequest(curl_handle, &data1, assetid, newcookie, "Audio", NULL, NULL);
+                curl_easy_reset(curl_handle);
+                if (fail)
+                        break;
+
+                if (checkRequest1Data(&data1, request1_expected_start_source)) {
+                        fail = 1;
+                        break;
+                }
+
+                fail = makeRequest2(curl_handle, &data1, output_path, sizeof(request1_expected_start_source), 1);
+                free(data1.memory);
+                break;
+        }
         }
 
         curl_easy_cleanup(curl_handle);
