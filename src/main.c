@@ -277,7 +277,7 @@ void displayHelp(void) {
                "  model\n"
                "\noptions:\n"
                "  --output OUTPUTFILEPATH  -  needed for font & model\n"
-               "  --cookie COOKIE          -  needed for model (you can also use RAF_COOKIE)\n");
+               "  --cookie COOKIE          -  needed for model (you can also use RAF_COOKIE environment variable)\n");
 }
 
 int readI64(const char *str, int64_t *out) {
