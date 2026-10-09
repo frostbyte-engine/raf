@@ -15,7 +15,9 @@ add_executable(raf ${RAF_SOURCES} ${RAF_HEADERS})
 target_include_directories(raf PRIVATE "${CMAKE_SOURCE_DIR}/src")
 
 find_package(CURL REQUIRED)
-target_link_libraries(raf PRIVATE CURL::libcurl)
+find_package(ZLIB REQUIRED)
+
+target_link_libraries(raf PRIVATE CURL::libcurl ZLIB::ZLIB)
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(raf PRIVATE -Wall -Wextra -Wpedantic)
