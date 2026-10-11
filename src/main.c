@@ -12,6 +12,7 @@
 const char cookie_expected_start1[] = ".ROBLOSECURITY=";
 const char cookie_expected_start2[] = "_|WARNING:-DO-NOT-SHARE-THIS.--Sharing-this-will-allow-someone-to-log-in-as-you-and-to-steal-your-ROBUX-and-items.|";
 const char request1_expected_start_font[] = "{\"locations\":[{\"assetFormat\":\"Font\",\"location\":\"";
+const char request1_expected_start_decal[] = "{\"locations\":[{\"assetFormat\":\"Decal\",\"location\":\"";
 const char request1_expected_start_source[] = "{\"locations\":[{\"assetFormat\":\"source\",\"location\":\"";
 
 struct DataStruct {
@@ -178,13 +179,17 @@ int makeRequest2(CURL *curl_handle, struct DataStruct *data1, char *output_path,
                 goto REQUEST2_END;
         }
 
-        FILE *output_file = fopen(output_path, "w");
-        if (output_file == NULL) {
-                int err = errno;
-                fail = 1;
-                fprintf(stderr, "[ERROR] Failed to open file '%s': %s\n", output_path, strerror(err));
-                goto REQUEST2_END;
-        }
+        FILE *output_file = NULL;
+        if (output_path) {
+                output_file = fopen(output_path, "w");
+                if (output_file == NULL) {
+                        int err = errno;
+                        fail = 1;
+                        fprintf(stderr, "[ERROR] Failed to open file '%s': %s\n", output_path, strerror(err));
+                        goto REQUEST2_END;
+                }
+        } else
+                output_file = stdout;
 
         struct curl_slist *headers = NULL;
 
@@ -228,13 +233,15 @@ int makeRequest2(CURL *curl_handle, struct DataStruct *data1, char *output_path,
 
                 if (fwrite(decompressed, sizeof(char), decompressed_size, output_file) < decompressed_size) {
                         fail = 1;
-                        fprintf(stderr, "[ERROR] Failed to write to '%s'\n", output_path);
+                        fprintf(stderr, "[ERROR] Failed to write to '%s'\n", output_path ? output_path : "[stdout]");
                         goto REQUEST2_END;
                 }
                 free(decompressed);
         }
-        fclose(output_file);
-        printf("Successfully written to '%s'\n", output_path);
+        if (output_path) {
+                fclose(output_file);
+                printf("Successfully written to '%s'\n", output_path);
+        }
 
 REQUEST2_END:
         if (compressed_data.size)
@@ -305,6 +312,8 @@ int getNewCookie(const char *model_type, char *cookie, char *newcookie, size_t n
 enum AssetType {
         ASSET_NONE,
         ASSET_FONT,
+        ASSET_DECAL,
+        ASSET_IMAGE,
         ASSET_MODEL,
         ASSET_PLUGIN,
         ASSET_AUDIO
@@ -314,12 +323,14 @@ void displayHelp(void) {
         printf("usage: raf TYPE ASSETID [options]\n"
                "\ntypes:\n"
                "  font\n"
+               "  decal\n"
+               "  image\n"
                "  model\n"
                "  plugin\n"
                "  audio\n"
                "\noptions:\n"
-               "  --output OUTPUTFILEPATH  -  needed for font, model, plugin, & audio\n"
-               "  --cookie COOKIE          -  needed for model, plugin & audio (you can also use RAF_COOKIE environment variable)\n");
+               "  --output OUTPUTFILEPATH  -  needed for font, image, model, plugin, & audio\n"
+               "  --cookie COOKIE          -  needed for decal, image, model, plugin & audio (you can also use RAF_COOKIE environment variable)\n");
 }
 
 int readI64(const char *str, int64_t *out) {
@@ -356,6 +367,12 @@ int main(int argc, char **argv) {
                         return 0;
                 } else if (strcmp(arg, "font") == 0) {
                         asset_type = ASSET_FONT;
+                        goto READ_ASSETID_ARG;
+                } else if (strcmp(arg, "decal") == 0) {
+                        asset_type = ASSET_DECAL;
+                        goto READ_ASSETID_ARG;
+                } else if (strcmp(arg, "image") == 0) {
+                        asset_type = ASSET_IMAGE;
                         goto READ_ASSETID_ARG;
                 } else if (strcmp(arg, "model") == 0) {
                         asset_type = ASSET_MODEL;
@@ -431,6 +448,27 @@ int main(int argc, char **argv) {
                 request_asset_type = request_asset_format = request_roblox_asset_format = "Font";
                 expected_start = request1_expected_start_font;
                 expected_start_size = sizeof(request1_expected_start_font);
+
+                is_compressed = 1;
+                break;
+        case ASSET_DECAL:
+                asset_type_string = "decal";
+                needs_cookie = 1;
+
+                request_asset_type = request_asset_format = request_roblox_asset_format = "Decal";
+                expected_start = request1_expected_start_decal;
+                expected_start_size = sizeof(request1_expected_start_decal);
+
+                is_compressed = 1;
+                break;
+        case ASSET_IMAGE:
+                asset_type_string = "image";
+                needs_output = 1;
+                needs_cookie = 1;
+
+                request_asset_type = request_asset_format = request_roblox_asset_format = "Image";
+                expected_start = request1_expected_start_source;
+                expected_start_size = sizeof(request1_expected_start_source);
 
                 is_compressed = 1;
                 break;
