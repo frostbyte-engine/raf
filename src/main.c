@@ -306,6 +306,7 @@ enum AssetType {
         ASSET_NONE,
         ASSET_FONT,
         ASSET_MODEL,
+        ASSET_PLUGIN,
         ASSET_AUDIO
 };
 
@@ -314,10 +315,11 @@ void displayHelp(void) {
                "\ntypes:\n"
                "  font\n"
                "  model\n"
+               "  plugin\n"
                "  audio\n"
                "\noptions:\n"
-               "  --output OUTPUTFILEPATH  -  needed for font, model, & audio\n"
-               "  --cookie COOKIE          -  needed for model & audio (you can also use RAF_COOKIE environment variable)\n");
+               "  --output OUTPUTFILEPATH  -  needed for font, model, plugin, & audio\n"
+               "  --cookie COOKIE          -  needed for model, plugin & audio (you can also use RAF_COOKIE environment variable)\n");
 }
 
 int readI64(const char *str, int64_t *out) {
@@ -357,6 +359,9 @@ int main(int argc, char **argv) {
                         goto READ_ASSETID_ARG;
                 } else if (strcmp(arg, "model") == 0) {
                         asset_type = ASSET_MODEL;
+                        goto READ_ASSETID_ARG;
+                } else if (strcmp(arg, "plugin") == 0) {
+                        asset_type = ASSET_PLUGIN;
                         goto READ_ASSETID_ARG;
                 } else if (strcmp(arg, "audio") == 0) {
                         asset_type = ASSET_AUDIO;
@@ -429,7 +434,7 @@ int main(int argc, char **argv) {
 
                 is_compressed = 1;
                 break;
-        case ASSET_MODEL: {
+        case ASSET_MODEL:
                 asset_type_string = "model";
                 needs_output = 1;
                 needs_cookie = 1;
@@ -440,7 +445,18 @@ int main(int argc, char **argv) {
 
                 is_compressed = 1;
                 break;
-        } case ASSET_AUDIO: {
+        case ASSET_PLUGIN:
+                asset_type_string = "plugin";
+                needs_output = 1;
+                needs_cookie = 1;
+
+                request_asset_type = "Plugin";
+                expected_start = request1_expected_start_source;
+                expected_start_size = sizeof(request1_expected_start_source);
+
+                is_compressed = 1;
+                break;
+        case ASSET_AUDIO:
                 asset_type_string = "audio";
                 needs_output = 1;
                 needs_cookie = 1;
@@ -451,7 +467,6 @@ int main(int argc, char **argv) {
 
                 is_compressed = 1;
                 break;
-        }
         }
 
         if (needs_output && !output_path) {
