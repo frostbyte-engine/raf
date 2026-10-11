@@ -381,12 +381,12 @@ int main(int argc, char **argv) {
 
         READ_ASSETID_ARG:
                 if (++i >= argc) {
-                        fprintf(stderr, "[ERROR] Missing PLACEID after '%s'\n", arg);
+                        fprintf(stderr, "[ERROR] Missing ASSETID after '%s'\n", arg);
                         return 1;
                 }
                 arg = argv[i];
                 if (readI64(arg, &assetid)) {
-                        fprintf(stderr, "[ERROR] Invalid PLACEID (not an int64)\n");
+                        fprintf(stderr, "[ERROR] Invalid ASSETID (not an int64)\n");
                         return 1;
                 }
         }
@@ -440,7 +440,7 @@ int main(int argc, char **argv) {
                         break;
                 }
 
-                fail = makeAssetRequest(curl_handle, &data1, assetid, newcookie, NULL, NULL, NULL);
+                fail = makeAssetRequest(curl_handle, &data1, assetid, newcookie, "Model", NULL, NULL);
 
                 curl_easy_reset(curl_handle);
                 if (fail)
