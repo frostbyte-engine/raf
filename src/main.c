@@ -186,22 +186,23 @@ int makeRequest2(CURL *curl_handle, struct DataStruct *data1, char *output_path,
                 goto REQUEST2_END;
         }
 
+        struct curl_slist *headers = NULL;
+
         curl_easy_setopt(curl_handle, CURLOPT_URL, url);
         if (is_compressed) {
                 curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_data);
                 curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, &compressed_data);
+                headers = curl_slist_append(headers, "Accept-Encoding: gzip");
         } else
                 curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, output_file);
-
-        struct curl_slist *headers = NULL;
  
-        headers = curl_slist_append(headers, "Accept-Encoding: gzip");
-
-        curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, headers);
+        if (headers)
+                curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, headers);
 
         error_code = curl_easy_perform(curl_handle);
 
-        curl_slist_free_all(headers);
+        if (headers)
+                curl_slist_free_all(headers);
 
         if (error_code != CURLE_OK) {
                 fail = 1;
@@ -315,8 +316,8 @@ void displayHelp(void) {
                "  model\n"
                "  audio\n"
                "\noptions:\n"
-               "  --output OUTPUTFILEPATH  -  needed for font & model\n"
-               "  --cookie COOKIE          -  needed for model (you can also use RAF_COOKIE environment variable)\n");
+               "  --output OUTPUTFILEPATH  -  needed for font, model, & audio\n"
+               "  --cookie COOKIE          -  needed for model & audio (you can also use RAF_COOKIE environment variable)\n");
 }
 
 int readI64(const char *str, int64_t *out) {
@@ -401,88 +402,85 @@ int main(int argc, char **argv) {
 
         struct DataStruct data1 = {0};
 
+        const char *asset_type_string = NULL;
+        int needs_output = 0;
+        int needs_cookie = 0;
+        const char *request_asset_type = NULL;
+        const char *request_asset_format = NULL;
+        const char *request_roblox_asset_format = NULL;
+        const char *expected_start = NULL;
+        size_t expected_start_size = 0;
+        int is_compressed = 0;
+
         int fail = 0;
         switch (asset_type) {
         case ASSET_NONE:
                 fprintf(stderr, "[ERROR] You must choose an asset type\n");
                 fail = 1;
+                goto FINISHED;
                 break;
         case ASSET_FONT:
-                if (!output_path) {
-                        fprintf(stderr, "[ERROR] You must provide an output file for type 'font'\n");
-                        fail = 1;
-                        break;
-                }
+                asset_type_string = "font";
+                needs_output = 1;
 
-                fail = makeAssetRequest(curl_handle, &data1, assetid, NULL, "Font", "Font", "Font");
-                curl_easy_reset(curl_handle);
-                if (fail)
-                        break;
+                request_asset_type = request_asset_format = request_roblox_asset_format = "Font";
+                expected_start = request1_expected_start_font;
+                expected_start_size = sizeof(request1_expected_start_font);
 
-                if (checkRequest1Data(&data1, request1_expected_start_font)) {
-                        fail = 1;
-                        break;
-                }
-
-                fail = makeRequest2(curl_handle, &data1, output_path, sizeof(request1_expected_start_font), 0);
-                free(data1.memory);
+                is_compressed = 1;
                 break;
         case ASSET_MODEL: {
-                if (!output_path) {
-                        fprintf(stderr, "[ERROR] You must provide an output file for type 'model'\n");
-                        fail = 1;
-                        break;
-                }
+                asset_type_string = "model";
+                needs_output = 1;
+                needs_cookie = 1;
 
-                char newcookie[2048];
-                if (getNewCookie("model", cookie, newcookie, sizeof(newcookie))) {
-                        fail = 1;
-                        break;
-                }
+                request_asset_type = "Model";
+                expected_start = request1_expected_start_source;
+                expected_start_size = sizeof(request1_expected_start_source);
 
-                fail = makeAssetRequest(curl_handle, &data1, assetid, newcookie, "Model", NULL, NULL);
-
-                curl_easy_reset(curl_handle);
-                if (fail)
-                        break;
-
-                if (checkRequest1Data(&data1, request1_expected_start_source)) {
-                        fail = 1;
-                        break;
-                }
-
-                fail = makeRequest2(curl_handle, &data1, output_path, sizeof(request1_expected_start_source), 1);
-                free(data1.memory);
+                is_compressed = 1;
                 break;
         } case ASSET_AUDIO: {
-                if (!output_path) {
-                        fprintf(stderr, "[ERROR] You must provide an output file for type 'audio'\n");
-                        fail = 1;
-                        break;
-                }
+                asset_type_string = "audio";
+                needs_output = 1;
+                needs_cookie = 1;
 
-                char newcookie[2048];
-                if (getNewCookie("audio", cookie, newcookie, sizeof(newcookie))) {
-                        fail = 1;
-                        break;
-                }
+                request_asset_type = "Audio";
+                expected_start = request1_expected_start_source;
+                expected_start_size = sizeof(request1_expected_start_source);
 
-                fail = makeAssetRequest(curl_handle, &data1, assetid, newcookie, "Audio", NULL, NULL);
-                curl_easy_reset(curl_handle);
-                if (fail)
-                        break;
-
-                if (checkRequest1Data(&data1, request1_expected_start_source)) {
-                        fail = 1;
-                        break;
-                }
-
-                fail = makeRequest2(curl_handle, &data1, output_path, sizeof(request1_expected_start_source), 1);
-                free(data1.memory);
+                is_compressed = 1;
                 break;
         }
         }
 
+        if (needs_output && !output_path) {
+                fprintf(stderr, "[ERROR] You must provide an output file for type '%s'\n", asset_type_string);
+                fail = 1;
+                goto FINISHED;
+        }
+
+        char newcookie[2048];
+        if (needs_cookie && getNewCookie(asset_type_string, cookie, newcookie, sizeof(newcookie))) {
+                fail = 1;
+                goto FINISHED;
+        }
+
+        fail = makeAssetRequest(curl_handle, &data1, assetid, needs_cookie ? newcookie : NULL, request_asset_type, request_asset_format, request_roblox_asset_format);
+        curl_easy_reset(curl_handle);
+        if (fail)
+                goto FINISHED;
+
+        if (checkRequest1Data(&data1, expected_start)) {
+                fail = 1;
+                goto FINISHED;
+        }
+
+        fail = makeRequest2(curl_handle, &data1, output_path, expected_start_size, is_compressed);
+
+FINISHED:
+        if (data1.size)
+                free(data1.memory);
         curl_easy_cleanup(curl_handle);
 
         curl_global_cleanup();
