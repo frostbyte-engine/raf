@@ -270,9 +270,6 @@ int checkRequest1Data(struct DataStruct *data, const char *expected_start) {
 }
 
 int getNewCookie(const char *model_type, char *cookie, char *newcookie, size_t newcookie_size) {
-        if (!cookie)
-                cookie = getenv("RAF_COOKIE");
-
         if (!cookie) {
                 fprintf(stderr, "[ERROR] You must provider either --cookie or RAF_COOKIE environment variable for type '%s'\n", model_type);
                 return 1;
@@ -316,7 +313,10 @@ enum AssetType {
         ASSET_IMAGE,
         ASSET_MODEL,
         ASSET_PLUGIN,
-        ASSET_AUDIO
+        ASSET_PLACE,
+        ASSET_AUDIO,
+        ASSET_UNKNOWN1,
+        ASSET_UNKNOWN2
 };
 
 void displayHelp(void) {
@@ -327,10 +327,11 @@ void displayHelp(void) {
                "  image\n"
                "  model\n"
                "  plugin\n"
+               "  place  -  the provided cookie's account must have access to the place\n"
                "  audio\n"
                "\noptions:\n"
-               "  --output OUTPUTFILEPATH  -  needed for font, image, model, plugin, & audio\n"
-               "  --cookie COOKIE          -  needed for decal, image, model, plugin & audio (you can also use RAF_COOKIE environment variable)\n");
+               "  --output OUTPUTFILEPATH  -  needed for font, image, model, plugin, place, & audio\n"
+               "  --cookie COOKIE          -  needed for decal, image, model, plugin, place & audio (you can also use RAF_COOKIE environment variable)\n");
 }
 
 int readI64(const char *str, int64_t *out) {
@@ -380,8 +381,17 @@ int main(int argc, char **argv) {
                 } else if (strcmp(arg, "plugin") == 0) {
                         asset_type = ASSET_PLUGIN;
                         goto READ_ASSETID_ARG;
+                } else if (strcmp(arg, "place") == 0) {
+                        asset_type = ASSET_PLACE;
+                        goto READ_ASSETID_ARG;
                 } else if (strcmp(arg, "audio") == 0) {
                         asset_type = ASSET_AUDIO;
+                        goto READ_ASSETID_ARG;
+                } else if (strcmp(arg, "unknown1") == 0) {
+                        asset_type = ASSET_UNKNOWN1;
+                        goto READ_ASSETID_ARG;
+                } else if (strcmp(arg, "unknown2") == 0) {
+                        asset_type = ASSET_UNKNOWN2;
                         goto READ_ASSETID_ARG;
                 } else if (strcmp(arg, "--output") == 0) {
                         if (++i >= argc) {
@@ -494,12 +504,41 @@ int main(int argc, char **argv) {
 
                 is_compressed = 1;
                 break;
+        case ASSET_PLACE:
+                asset_type_string = "place";
+                needs_output = 1;
+                needs_cookie = 1;
+
+                request_asset_type = "Place";
+                expected_start = request1_expected_start_source;
+                expected_start_size = sizeof(request1_expected_start_source);
+
+                is_compressed = 1;
+                break;
         case ASSET_AUDIO:
                 asset_type_string = "audio";
                 needs_output = 1;
                 needs_cookie = 1;
 
                 request_asset_type = "Audio";
+                expected_start = request1_expected_start_source;
+                expected_start_size = sizeof(request1_expected_start_source);
+
+                is_compressed = 1;
+                break;
+        case ASSET_UNKNOWN1:
+                asset_type_string = "unknown1";
+
+                expected_start = request1_expected_start_source;
+                expected_start_size = sizeof(request1_expected_start_source);
+
+                is_compressed = 1;
+                break;
+        case ASSET_UNKNOWN2:
+                asset_type_string = "unknown2";
+
+                // TODO: the idea here was that we would check something other than the 'source' start,
+                // which probably means we will need to dynamically get the url and not check really anything
                 expected_start = request1_expected_start_source;
                 expected_start_size = sizeof(request1_expected_start_source);
 
@@ -513,8 +552,11 @@ int main(int argc, char **argv) {
                 goto FINISHED;
         }
 
+        if (!cookie)
+                cookie = getenv("RAF_COOKIE");
+
         char newcookie[2048];
-        if (needs_cookie && getNewCookie(asset_type_string, cookie, newcookie, sizeof(newcookie))) {
+        if ((needs_cookie || cookie) && getNewCookie(asset_type_string, cookie, newcookie, sizeof(newcookie))) {
                 fail = 1;
                 goto FINISHED;
         }
